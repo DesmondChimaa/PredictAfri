@@ -1,0 +1,8 @@
+PredictAfri - Base Sepolia Testnet
+===================================
+USDC:              0x036CbD53842c5426634e7929541eC2318f3dCF7e
+Treasury:          0x46337250102f1615Be767ac6C00a5f97A42CB857
+MarketFactory:     0x383b71390c7179510d97A6AD217a0684Cc8d6EE8
+PredictionMarket:  0x5Bb07b6a9f48d6a95Ba805ACa4515d8311077864
+CourtRegistry:     0x0474Bc50A6f2FA1F43A92d8cF8f7572F35B1D708
+DisputeManager:    0xC3a67a6d45274F143db60D527288c17C684e0297
