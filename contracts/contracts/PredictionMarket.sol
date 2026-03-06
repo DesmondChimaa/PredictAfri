@@ -111,11 +111,11 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit MarketCreated(marketId, _question, _initialLiquidity, block.timestamp);
     }
 
-    function buyShares(uint256 _marketId, bool _isYes, uint256 _amount) 
-        external 
-        nonReentrant 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.OPEN) 
+    function buyShares(uint256 _marketId, bool _isYes, uint256 _amount)
+        external
+        nonReentrant
+        marketExists(_marketId)
+        inState(_marketId, MarketState.OPEN)
     {
         Market storage market = markets[_marketId];
         require(block.timestamp < market.eventStartTime, "Event already started");
@@ -141,29 +141,33 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit SharesPurchased(_marketId, msg.sender, _isYes, _amount, shares, block.timestamp);
     }
 
-    function calculatePayout(uint256 _marketId, bool _isYes, uint256 _amount) 
-        external 
-        view 
-        marketExists(_marketId) 
-        returns (uint256 shares, uint256 potentialPayout) 
+    function calculatePayout(uint256 _marketId, bool _isYes, uint256 _amount)
+        external
+        view
+        marketExists(_marketId)
+        returns (uint256 shares, uint256 potentialPayout)
     {
         Market storage market = markets[_marketId];
         uint256 totalPool = market.yesPool + market.noPool;
 
         if (_isYes) {
             shares = (_amount * totalPool * 100) / (market.yesPool * OVERROUND);
-            potentialPayout = (shares * market.noPool) / market.totalShares + _amount;
+            uint256 newTotalShares = market.totalShares + shares;
+            if (newTotalShares == 0) return (shares, _amount);
+            potentialPayout = (shares * market.noPool) / newTotalShares + _amount;
         } else {
             shares = (_amount * totalPool * 100) / (market.noPool * OVERROUND);
-            potentialPayout = (shares * market.yesPool) / market.totalShares + _amount;
+            uint256 newTotalShares = market.totalShares + shares;
+            if (newTotalShares == 0) return (shares, _amount);
+            potentialPayout = (shares * market.yesPool) / newTotalShares + _amount;
         }
     }
 
-    function cashout(uint256 _marketId, bool _isYes) 
-        external 
-        nonReentrant 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.OPEN) 
+    function cashout(uint256 _marketId, bool _isYes)
+        external
+        nonReentrant
+        marketExists(_marketId)
+        inState(_marketId, MarketState.OPEN)
     {
         Market storage market = markets[_marketId];
         require(block.timestamp < market.eventStartTime - CASHOUT_CLOSE_BEFORE, "Cashout window closed");
@@ -201,11 +205,11 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit CashoutProcessed(_marketId, msg.sender, _isYes, payout, block.timestamp);
     }
 
-    function lockMarket(uint256 _marketId) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.OPEN) 
+    function lockMarket(uint256 _marketId)
+        external
+        onlyOwner
+        marketExists(_marketId)
+        inState(_marketId, MarketState.OPEN)
     {
         Market storage market = markets[_marketId];
         require(block.timestamp >= market.eventStartTime, "Event not started yet");
@@ -214,61 +218,57 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         markets[_marketId].state = MarketState.LOCKED;
     }
 
-    function proposeResult(uint256 _marketId, bool _result) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.LOCKED) 
+    function proposeResult(uint256 _marketId, bool _result)
+        external
+        onlyOwner
+        marketExists(_marketId)
+        inState(_marketId, MarketState.LOCKED)
     {
         markets[_marketId].result = _result;
         markets[_marketId].state = MarketState.PENDING;
         emit ResultProposed(_marketId, _result, block.timestamp);
     }
 
-    function resolveMarket(uint256 _marketId) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.PENDING) 
+    function resolveMarket(uint256 _marketId)
+        external
+        onlyOwner
+        marketExists(_marketId)
+        inState(_marketId, MarketState.PENDING)
     {
         markets[_marketId].state = MarketState.RESOLVED;
         emit MarketResolved(_marketId, markets[_marketId].result, block.timestamp);
     }
 
-    function claimWinnings(uint256 _marketId) 
-        external 
-        nonReentrant 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.RESOLVED) 
+    function claimWinnings(uint256 _marketId)
+        external
+        nonReentrant
+        marketExists(_marketId)
+        inState(_marketId, MarketState.RESOLVED)
     {
         Market storage market = markets[_marketId];
         Position storage position = positions[_marketId][msg.sender];
 
         uint256 userShares;
         uint256 losingPool;
-        uint256 winningPool;
         uint256 amountPaid;
 
         if (market.result) {
             userShares = position.yesShares;
             amountPaid = position.yesAmountPaid;
             losingPool = market.noPool;
-            winningPool = market.yesPool;
             position.yesShares = 0;
             position.yesAmountPaid = 0;
         } else {
             userShares = position.noShares;
             amountPaid = position.noAmountPaid;
             losingPool = market.yesPool;
-            winningPool = market.noPool;
             position.noShares = 0;
             position.noAmountPaid = 0;
         }
 
         require(userShares > 0, "No winning shares");
 
-        uint256 totalWinningShares = market.totalShares;
-        uint256 profitFromLosingPool = (userShares * losingPool) / totalWinningShares;
+        uint256 profitFromLosingPool = (userShares * losingPool) / market.totalShares;
         uint256 protocolFee = (profitFromLosingPool * PROTOCOL_FEE_PERCENT) / 100;
         uint256 userProfit = profitFromLosingPool - protocolFee;
         uint256 totalPayout = amountPaid + userProfit;
@@ -279,11 +279,11 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit WinningsClaimed(_marketId, msg.sender, totalPayout, block.timestamp);
     }
 
-    function claimRefund(uint256 _marketId) 
-        external 
-        nonReentrant 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.CANCELLED) 
+    function claimRefund(uint256 _marketId)
+        external
+        nonReentrant
+        marketExists(_marketId)
+        inState(_marketId, MarketState.CANCELLED)
     {
         Position storage position = positions[_marketId][msg.sender];
         uint256 refundAmount = position.yesAmountPaid + position.noAmountPaid;
@@ -298,15 +298,15 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit RefundClaimed(_marketId, msg.sender, refundAmount, block.timestamp);
     }
 
-    function cancelMarket(uint256 _marketId) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
+    function cancelMarket(uint256 _marketId)
+        external
+        onlyOwner
+        marketExists(_marketId)
     {
         MarketState state = markets[_marketId].state;
         require(
-            state == MarketState.OPEN || 
-            state == MarketState.LOCKED || 
+            state == MarketState.OPEN ||
+            state == MarketState.LOCKED ||
             state == MarketState.PENDING,
             "Cannot cancel resolved market"
         );
@@ -316,60 +316,60 @@ contract PredictionMarket is Ownable, ReentrancyGuard {
         emit MarketCancelled(_marketId, block.timestamp);
     }
 
-    function pauseMarket(uint256 _marketId) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.OPEN) 
+    function pauseMarket(uint256 _marketId)
+        external
+        onlyOwner
+        marketExists(_marketId)
+        inState(_marketId, MarketState.OPEN)
     {
         markets[_marketId].state = MarketState.LOCKED;
         emit MarketPaused(_marketId, block.timestamp);
     }
 
-    function unpauseMarket(uint256 _marketId) 
-        external 
-        onlyOwner 
-        marketExists(_marketId) 
-        inState(_marketId, MarketState.LOCKED) 
+    function unpauseMarket(uint256 _marketId)
+        external
+        onlyOwner
+        marketExists(_marketId)
+        inState(_marketId, MarketState.LOCKED)
     {
         markets[_marketId].state = MarketState.OPEN;
         emit MarketUnpaused(_marketId, block.timestamp);
     }
 
-    function getMarket(uint256 _marketId) 
-        external 
-        view 
-        marketExists(_marketId) 
-        returns (Market memory) 
+    function getMarket(uint256 _marketId)
+        external
+        view
+        marketExists(_marketId)
+        returns (Market memory)
     {
         return markets[_marketId];
     }
 
-    function getPosition(uint256 _marketId, address _user) 
-        external 
-        view 
-        marketExists(_marketId) 
-        returns (Position memory) 
+    function getPosition(uint256 _marketId, address _user)
+        external
+        view
+        marketExists(_marketId)
+        returns (Position memory)
     {
         return positions[_marketId][_user];
     }
 
-    function getYesPrice(uint256 _marketId) 
-        external 
-        view 
-        marketExists(_marketId) 
-        returns (uint256) 
+    function getYesPrice(uint256 _marketId)
+        external
+        view
+        marketExists(_marketId)
+        returns (uint256)
     {
         Market storage market = markets[_marketId];
         uint256 totalPool = market.yesPool + market.noPool;
         return (market.yesPool * OVERROUND) / totalPool;
     }
 
-    function getNoPrice(uint256 _marketId) 
-        external 
-        view 
-        marketExists(_marketId) 
-        returns (uint256) 
+    function getNoPrice(uint256 _marketId)
+        external
+        view
+        marketExists(_marketId)
+        returns (uint256)
     {
         Market storage market = markets[_marketId];
         uint256 totalPool = market.yesPool + market.noPool;
