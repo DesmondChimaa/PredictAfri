@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// @tag bc_zqw3itrn
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
